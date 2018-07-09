@@ -1,0 +1,411 @@
+<html>
+	<head>
+		<style type="text/css">
+			#canvas{
+				width: 100%;
+				height: 100%;
+			}
+		</style>
+		<title> snekz.io </title>
+		<link rel="stylesheet" type="text/css" href="minireset.css">
+		<script
+  src="https://code.jquery.com/jquery-3.3.1.js"
+  integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+  crossorigin="anonymous"></script>
+		<script>
+			/*
+				
+			*/
+
+			function degToRad(deg){
+				return deg/180*Math.PI;
+			}
+			function normalizeRads(rad){
+				while(Math.abs(rad) > Math.PI){
+					if(rad > 0){
+						rad -= Math.PI*2;
+					}else{
+						rad += Math.PI*2;
+					}
+				}
+				return rad;
+			}
+
+			class Board{
+				constructor(size){
+					this.size = size;
+				}
+				pickRandomLocation(){
+					return Math.random()*this.size-(this.size/2)
+				}
+			}
+
+			class Sim{
+				constructor(board){
+
+					let addLight = (x, y) => {
+						return this.lightList.push(new Light(board, x, y))
+					}
+					this.snakeList = [];
+					this.snakeList.push (new Snake(board, 0, 0, "human", addLight));
+
+					this.nowPrior = null;
+
+
+					for (let i = 0; i < 20; i++) {
+						let x = board.pickRandomLocation();
+						let y = board.pickRandomLocation();
+					
+						this.snakeList.push (new Snake(board, x, y, "AI", addLight));
+					}
+
+					this.snake = this.snakeList[0];
+
+					this.lightList = [];
+
+					for (let i = 0; i < board.size/10; i++) {
+						let x = board.pickRandomLocation();
+						let y = board.pickRandomLocation();
+						addLight(x, y)
+					}
+
+				}
+
+				tick(dt){
+					this.snakeList.forEach(snake => snake.tick(dt))
+				}
+
+				//killSnake not yet fully functional. killSnake is not used.
+				killSnake(snakeNum){
+					//snake.dead = true;
+					let snake = this.snakeList[snakeNum];
+					for (var i = 0; i < snake.body.length;) {
+						this.lightList.push(new Light(board, snake.body[0].x, snake.body[0].y))
+						snake.body.pop()
+					}
+					this.snakeList.splice(snakeNum, 1)
+				}
+
+				lightsEaten(){
+					this.snakeList.forEach(snake => {
+						for(let i = 0; i < this.lightList.length;){
+							let light = this.lightList[i];
+							if(Math.abs(snake.x - light.x) + Math.abs(snake.y - light.y) < 30){
+								this.lightList.splice(i, 1);
+								snake.grow(1)
+							}else{
+								i++;
+							}
+						}
+					})
+				}
+
+				//not yet functional
+				snakesCollided(){
+					return;
+					this.snakeList.forEach(snake => {
+						for(let i = 0; i < this.snakeList.length;){
+							let snake2 = this.snakeList[i];
+							if(snake == snake2){
+								//continue;
+							}
+							if(Math.abs(snake2.x - snake.x) + Math.abs(snake2.y - snake.y) < 30){
+								this.killSnake(i);
+							}else{
+								i++;
+							}
+
+						}
+					})
+				}
+			}
+
+			class Light{
+				constructor(board, x, y){
+					this.board = board;					
+					this.x = x;
+					this.y = y;
+				}
+			}
+
+			class Snake{
+				constructor(board, x, y, control, addLight){
+					this.board = board;
+					this.x = x;
+					this.y = y;
+					this.control = control;
+					this.addLight = addLight;
+					this.targetRad = Math.random()*Math.PI*2;
+					this.speed = 50;
+					this.turnSpeedRad = degToRad(1000);
+					this.headingRad = 0;
+					this.length = 10;
+					this.body = [];
+				}
+				getTargetAngleInRadians(targetX, targetY){
+					let dx = (targetX-this.x);
+					let dy = (targetY-this.y);
+					let rad = Math.atan2(dy,dx)
+					return rad;
+				}
+				angleTick(dt){
+					this.headingRad = normalizeRads(this.headingRad);
+					//this normalizes the targetRad so that the test (targetRad > 0) works.
+					let targetRad = this.targetRad - this.headingRad;
+					if(Math.abs(targetRad) > Math.PI){
+						targetRad *= -1;
+					}
+					if(targetRad > 0){
+						this.headingRad += this.turnSpeedRad*dt;
+						if(this.headingRad > this.targetRad){
+							this.headingRad = this.targetRad;
+						}
+					}else{
+						this.headingRad -= this.turnSpeedRad*dt;
+						if(this.headingRad < this.targetRad){
+							this.headingRad = this.targetRad;
+						}
+					}
+					this.headingRad = normalizeRads(this.headingRad);
+				}
+				moveTick(dt){
+					let moveX = this.speed*dt*Math.cos(this.headingRad);
+					let moveY = this.speed*dt*Math.sin(this.headingRad);
+					this.x += moveX;
+					this.y += moveY;
+					
+					if(this.x > this.board.size/2){
+						this.x = this.board.size*-0.5;
+					}
+					if(this.x < -this.board.size/2){
+						this.x = this.board.size*0.5;
+					}
+					if(this.y > this.board.size/2){
+						this.y = this.board.size*-0.5;
+					}
+					if(this.y < -this.board.size/2){
+						this.y = this.board.size*0.5;
+					}
+				}
+				bodyTick(){
+					if(this.body.length < this.length){
+						this.body.push({x: this.x, y: this.y})
+					}
+					while(this.body.length > this.length){
+						this.body.shift()
+					}
+					this.body.shift()
+					this.body.push({x: this.x, y: this.y})
+					
+					if(this.length < 10 && this.speeding){
+						this.speeding = false;
+					}
+					if(this.speeding){
+						this.grow(-1);
+						//sim.lightList.push(new Light(this.body[0].x, this.body[0].y))
+						this.addLight(this.body[0].x, this.body[0].y)
+						this.speed = 1000
+					}else{
+						this.speed = 500
+					}
+				}
+				tick(dt){
+					if(!this.dead){
+						if(this.control == "AI"){
+							//this.ai();
+						}
+						this.angleTick(dt);
+						this.moveTick(dt);
+						this.bodyTick();
+					}
+				}
+				grow(amount){
+					this.length += amount;
+				}
+				setTarget(x, y){
+					this.targetRad = this.getTargetAngleInRadians(x, y);
+				}
+			}
+
+
+			//CONTROL
+			function initControls(snake){
+				$( document ).on( "mousemove", function( event ) {
+					mouseX = event.pageX+snake.x-500;
+					mouseY = event.pageY+snake.y-400;
+					snake.setTarget(mouseX, mouseY)
+				});
+
+				$( document ).on( "mousedown", function( event ) {
+					if(snake.length > 10){
+						snake.speeding = true;
+					}
+				});
+
+				$( document ).on( "mouseup", function( event ) {
+					snake.speeding = false
+				});
+			}
+
+
+			//VIEW
+
+			let ImageURLs = {
+				head: 'images/orangeCircle.png',
+				body: 'images/blueCircle.png',
+				light: 'images/light.png',
+				background: 'images/black.png',
+			};
+
+			let Img = {};
+
+			class View{
+				constructor(){
+
+				}
+				
+
+				imageLoad(imageURLs, target, callbackFn){
+					let imagesRequested = 0;
+					let imagesLoaded = 0;
+					for(let key in imageURLs){
+						let image = imageURLs[key];
+						target[key] = new Image();
+						target[key].onload = function(){
+							imagesLoaded ++
+						};
+						target[key].src = image;
+						imagesRequested ++;
+					}
+
+					let handle = setInterval( () => {
+						if( imagesLoaded >= imagesRequested ) {
+							console.assert(imagesLoaded == imagesRequested)
+							clearInterval(handle);
+							callbackFn();
+						}
+					},1)
+				}
+
+				myCanvas(canvasId, board){
+					var canvas = document.getElementById(canvasId);
+					var context = canvas.getContext('2d');
+					
+					context.draw = function(spec, imageObj, camera){
+						let drawX = spec.x-camera.x;
+						let drawY = spec.y-camera.y;
+						if(spec.xAnchor && spec.yAnchor){
+							drawX -= spec.width*spec.xAnchor;
+							drawY -= spec.height*spec.yAnchor;
+						}
+						this.drawImage(imageObj, drawX, drawY, spec.width, spec.height);
+						
+						this.drawImage(imageObj, drawX+board.size, drawY, spec.width, spec.height);
+						this.drawImage(imageObj, drawX-board.size, drawY, spec.width, spec.height);
+						this.drawImage(imageObj, drawX, drawY+board.size, spec.width, spec.height);
+						this.drawImage(imageObj, drawX, drawY-board.size, spec.width, spec.height);
+
+						this.drawImage(imageObj, drawX+board.size, drawY+board.size, spec.width, spec.height);
+						this.drawImage(imageObj, drawX+board.size, drawY-board.size, spec.width, spec.height);
+						this.drawImage(imageObj, drawX-board.size, drawY+board.size, spec.width, spec.height);
+						this.drawImage(imageObj, drawX-board.size, drawY-board.size, spec.width, spec.height);
+						//renders image in wrap-around boards
+					}.bind(context)
+
+					context.clear = function(spec, imageObj){
+						this.drawImage(Img.background, 0, 0, 1200, 800);
+					}.bind(context)
+					return context
+				}
+
+				render(context, sim){
+					context.clear();
+					
+					let camera = {};
+
+					let headSpec = {x: 100, y: 100, width: 50, height: 50, xAnchor: 0.5, yAnchor: 0.5};
+
+					camera.x = sim.snake.x-500;
+					camera.y = sim.snake.y-400;
+
+					for(let i = 0; i < sim.lightList.length; i++){
+						let lightSpec = {x: sim.lightList[i].x, y: sim.lightList[i].y, width: 45, height: 45, xAnchor: 0.5, yAnchor: 0.5};
+						context.draw(lightSpec, Img.light, camera)
+					}
+
+					sim.snakeList.forEach(snake => {
+						headSpec.x = snake.x;
+						headSpec.y = snake.y;
+
+						for(let i = 0; i < snake.body.length; i++){
+							let bodySpec = {x: snake.body[i].x, y: snake.body[i].y, width: 40, height: 40, xAnchor: 0.5, yAnchor: 0.5};
+							context.draw(bodySpec, Img.body, camera)
+						}
+						context.draw(headSpec, Img.head, camera);
+					})
+				}
+			}
+
+
+
+			//ORGANIZATION
+
+			function Main(){
+				let view = new View();
+
+				let board = new Board(2000);
+
+				let context = view.myCanvas('myCanvas', board);
+
+				let sim = new Sim(board);
+
+				initControls(sim.snake);
+
+				function tickSim(){
+					sim.timeSinceLastSim = 0;
+					let dt;
+					let now = Date.now();
+					if(sim.nowPrior === null){
+						dt = 1.0/60
+					}else{
+						dt = (now - sim.nowPrior)/1000;
+					}
+					sim.nowPrior = now;
+					sim.timeSinceLastSim += dt;
+					while(sim.timeSinceLastSim > 1/60){
+						sim.lightsEaten(sim.snake);
+						sim.snakesCollided();
+						$("#length").html("Your length is "+sim.snake.length);
+						sim.tick(1/60);
+						sim.timeSinceLastSim -= 1/60;
+					}
+				}
+
+				function tickView(){
+					view.render(context, sim);
+				}
+
+				setInterval(tickSim, (1000/60))
+				setInterval(tickView, (1000/60))
+			}
+
+			$( document ).ready(function(){	
+				let view = new View();		
+				view.imageLoad(ImageURLs, Img, Main);
+			});
+			
+			
+    </script>
+  </body>
+</html>        
+		</script>
+	</head>
+	<body>
+		<div id="canvas">
+			<canvas id="myCanvas" width="1000" height="790"></canvas>
+		</div>
+		<div id="length">
+			length
+		</div>
+	</body>
+</html>
