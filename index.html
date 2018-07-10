@@ -52,7 +52,7 @@
 					this.nowPrior = null;
 
 
-					for (let i = 0; i < 20; i++) {
+					for (let i = 0; i < 1; i++) {
 						let x = board.pickRandomLocation();
 						let y = board.pickRandomLocation();
 					
@@ -136,7 +136,7 @@
 					this.control = control;
 					this.addLight = addLight;
 					this.targetRad = Math.random()*Math.PI*2;
-					this.speed = 50;
+					this.speed = 25;
 					this.turnSpeedRad = degToRad(1000);
 					this.headingRad = 0;
 					this.length = 10;
@@ -259,36 +259,39 @@
 
 			let Img = {};
 
-			class View{
-				constructor(){
-
+			function ImageLoad(imageURLs, target, callbackFn){
+				let imagesRequested = 0;
+				let imagesLoaded = 0;
+				for(let key in imageURLs){
+					let image = imageURLs[key];
+					target[key] = new Image();
+					target[key].onload = function(){
+						imagesLoaded ++
+					};
+					target[key].src = image;
+					imagesRequested ++;
 				}
-				
 
-				imageLoad(imageURLs, target, callbackFn){
-					let imagesRequested = 0;
-					let imagesLoaded = 0;
-					for(let key in imageURLs){
-						let image = imageURLs[key];
-						target[key] = new Image();
-						target[key].onload = function(){
-							imagesLoaded ++
-						};
-						target[key].src = image;
-						imagesRequested ++;
+				let handle = setInterval( () => {
+					if( imagesLoaded >= imagesRequested ) {
+						console.assert(imagesLoaded == imagesRequested)
+						clearInterval(handle);
+						callbackFn();
 					}
+				},1)
+			}
 
-					let handle = setInterval( () => {
-						if( imagesLoaded >= imagesRequested ) {
-							console.assert(imagesLoaded == imagesRequested)
-							clearInterval(handle);
-							callbackFn();
-						}
-					},1)
+
+			class View{
+				constructor(observer, sim, canvas, board){
+					this.context = this.myCanvas(canvas[0], board);
+					this.observer = observer;
+					this.sim = sim;
+					this.xLen = canvas.width();
+					this.yLen = canvas.height();
 				}
 
-				myCanvas(canvasId, board){
-					var canvas = document.getElementById(canvasId);
+				myCanvas(canvas, board){
 					var context = canvas.getContext('2d');
 					
 					context.draw = function(spec, imageObj, camera){
@@ -318,15 +321,17 @@
 					return context
 				}
 
-				render(context, sim){
+				render(){
+					let context = this.context;
+					let sim = this.sim;
 					context.clear();
 					
 					let camera = {};
 
 					let headSpec = {x: 100, y: 100, width: 50, height: 50, xAnchor: 0.5, yAnchor: 0.5};
 
-					camera.x = sim.snake.x-500;
-					camera.y = sim.snake.y-400;
+					camera.x = this.observer.x-this.xLen/2;
+					camera.y = this.observer.y-this.yLen/2;
 
 					for(let i = 0; i < sim.lightList.length; i++){
 						let lightSpec = {x: sim.lightList[i].x, y: sim.lightList[i].y, width: 45, height: 45, xAnchor: 0.5, yAnchor: 0.5};
@@ -350,48 +355,65 @@
 
 			//ORGANIZATION
 
+			function tickSim(sim){
+				sim.timeSinceLastSim = 0;
+				let dt;
+				let now = Date.now();
+				if(sim.nowPrior === null){
+					dt = 1.0/60;
+				}else{
+					dt = (now - sim.nowPrior)/1000;
+				}
+				sim.nowPrior = now;
+				sim.timeSinceLastSim += dt;
+				while(sim.timeSinceLastSim > 1/60){
+					sim.lightsEaten(sim.snake);
+					sim.snakesCollided();
+					$("#length").html("Your length is "+sim.snake.length);
+					sim.tick(1/60);
+					sim.timeSinceLastSim -= 1/60;
+				}
+			}
+
+			function tickView(view){
+			
+				view.render();
+			
+			}
+
+			class Server{
+				constructor(){
+					this.board = new Board(500)
+					this.sim = new Sim(this.board)
+					setInterval(()=>{tickSim(this.sim)}, (1000/60))
+				}
+			}
+
+			class Client{
+				constructor(canvasId){
+					this.board = new Board(500)
+					this.sim = new Sim(this.board)
+
+					let canvas = $('<canvas width="550" height="400"></canvas>');
+
+					canvas.appendTo(canvasId)
+
+					this.view = new View(this.sim.snakeList[0], this.sim, canvas, this.board)
+
+					initControls(this.sim.snakeList[0]);
+
+					setInterval(()=>{tickSim(this.sim)}, (1000/60))
+					setInterval(()=>{tickView(this.view)}, (1000/60))
+				}
+			}
+
 			function Main(){
-				let view = new View();
-
-				let board = new Board(2000);
-
-				let context = view.myCanvas('myCanvas', board);
-
-				let sim = new Sim(board);
-
-				initControls(sim.snake);
-
-				function tickSim(){
-					sim.timeSinceLastSim = 0;
-					let dt;
-					let now = Date.now();
-					if(sim.nowPrior === null){
-						dt = 1.0/60
-					}else{
-						dt = (now - sim.nowPrior)/1000;
-					}
-					sim.nowPrior = now;
-					sim.timeSinceLastSim += dt;
-					while(sim.timeSinceLastSim > 1/60){
-						sim.lightsEaten(sim.snake);
-						sim.snakesCollided();
-						$("#length").html("Your length is "+sim.snake.length);
-						sim.tick(1/60);
-						sim.timeSinceLastSim -= 1/60;
-					}
-				}
-
-				function tickView(){
-					view.render(context, sim);
-				}
-
-				setInterval(tickSim, (1000/60))
-				setInterval(tickView, (1000/60))
+				new Server();
+				new Client("#canvas");
 			}
 
 			$( document ).ready(function(){	
-				let view = new View();		
-				view.imageLoad(ImageURLs, Img, Main);
+				ImageLoad(ImageURLs, Img, Main);
 			});
 			
 			
@@ -402,7 +424,6 @@
 	</head>
 	<body>
 		<div id="canvas">
-			<canvas id="myCanvas" width="1000" height="790"></canvas>
 		</div>
 		<div id="length">
 			length
