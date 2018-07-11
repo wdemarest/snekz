@@ -32,7 +32,10 @@
 			}
 
 			class Board{
-				constructor(size){
+				constructor(){
+					this.size = null
+				}
+				setData(size){
 					this.size = size;
 				}
 				pickRandomLocation(){
@@ -41,25 +44,48 @@
 			}
 
 			class Sim{
-				constructor(board){
+				constructor(){
+					this.board = null;
+					this.snakeList = null;
+					this.lightList = null;
+					this.nowPrior = null;
+				}
+
+				initSim(board){
 
 					let addLight = (x, y) => {
-						return this.lightList.push(new Light(board, x, y))
+						
+						let newLight = new Light();
+
+						newLight.setData(board, x, y)
+
+						return this.lightList.push (newLight);
 					}
+
+					this.board = board;
+
 					this.snakeList = [];
-					this.snakeList.push (new Snake(board, 0, 0, "human", addLight));
+
+					let newSnake = new Snake();
+
+					newSnake.setData(board, 0, 0, "human", addLight)
+
+					this.snakeList.push (newSnake);	
 
 					this.nowPrior = null;
 
 
-					for (let i = 0; i < 1; i++) {
-						let x = board.pickRandomLocation();
-						let y = board.pickRandomLocation();
+					for (let i = 0; i < 5; i++) {
+						let x = this.board.pickRandomLocation();
+						let y = this.board.pickRandomLocation();
 					
-						this.snakeList.push (new Snake(board, x, y, "AI", addLight));
-					}
+						let newSnake = new Snake();
 
-					this.snake = this.snakeList[0];
+						newSnake.setData(board, x, y, "AI", addLight)
+
+						this.snakeList.push (newSnake);	
+
+					}
 
 					this.lightList = [];
 
@@ -121,7 +147,12 @@
 			}
 
 			class Light{
-				constructor(board, x, y){
+				constructor(){
+					this.board = null;					
+					this.x = null;
+					this.y = null;
+				}
+				setData(board, x, y){
 					this.board = board;					
 					this.x = x;
 					this.y = y;
@@ -129,7 +160,20 @@
 			}
 
 			class Snake{
-				constructor(board, x, y, control, addLight){
+				constructor(){
+					this.board = null;
+					this.x = null;
+					this.y = null;
+					this.control = null;
+					this.addLight = null;
+					this.targetRad = null;
+					this.speed = null;
+					this.turnSpeedRad = null;
+					this.headingRad = null;
+					this.length = null;
+					this.body = null;
+				}
+				setData(board, x, y, control, addLight){
 					this.board = board;
 					this.x = x;
 					this.y = y;
@@ -212,11 +256,16 @@
 				tick(dt){
 					if(!this.dead){
 						if(this.control == "AI"){
-							//this.ai();
+							this.ai(dt);
 						}
 						this.angleTick(dt);
 						this.moveTick(dt);
 						this.bodyTick();
+					}
+				}
+				ai(dt){
+					if(Math.random()*1<dt){
+						this.targetRad = Math.random()*Math.PI*2;
 					}
 				}
 				grow(amount){
@@ -283,8 +332,9 @@
 
 
 			class View{
-				constructor(observer, sim, canvas, board){
-					this.context = this.myCanvas(canvas[0], board);
+				constructor(observer, sim, canvas){
+					this.board = sim.board;
+					this.context = this.myCanvas(canvas[0], this.board);
 					this.observer = observer;
 					this.sim = sim;
 					this.xLen = canvas.width();
@@ -294,24 +344,32 @@
 				myCanvas(canvas, board){
 					var context = canvas.getContext('2d');
 					
-					context.draw = function(spec, imageObj, camera){
-						let drawX = spec.x-camera.x;
-						let drawY = spec.y-camera.y;
+					context.draw = function(spec, imageObj, camera, zoom){
+						let drawX = (spec.x-camera.x)*zoom;
+						let drawY = (spec.y-camera.y)*zoom;
 						if(spec.xAnchor && spec.yAnchor){
-							drawX -= spec.width*spec.xAnchor;
-							drawY -= spec.height*spec.yAnchor;
+							drawX -= (spec.width*spec.xAnchor)*zoom;
+							drawY -= (spec.height*spec.yAnchor)*zoom;
 						}
-						this.drawImage(imageObj, drawX, drawY, spec.width, spec.height);
-						
-						this.drawImage(imageObj, drawX+board.size, drawY, spec.width, spec.height);
-						this.drawImage(imageObj, drawX-board.size, drawY, spec.width, spec.height);
-						this.drawImage(imageObj, drawX, drawY+board.size, spec.width, spec.height);
-						this.drawImage(imageObj, drawX, drawY-board.size, spec.width, spec.height);
 
-						this.drawImage(imageObj, drawX+board.size, drawY+board.size, spec.width, spec.height);
-						this.drawImage(imageObj, drawX+board.size, drawY-board.size, spec.width, spec.height);
-						this.drawImage(imageObj, drawX-board.size, drawY+board.size, spec.width, spec.height);
-						this.drawImage(imageObj, drawX-board.size, drawY-board.size, spec.width, spec.height);
+						let w = spec.width*zoom;
+						let h = spec.height*zoom;
+
+						let s = board.size*zoom;
+
+						this.drawImage(imageObj, drawX, drawY, w, h);
+
+						if(camera.wrap){
+							this.drawImage(imageObj, drawX+s, drawY, w, h);
+							this.drawImage(imageObj, drawX-s, drawY, w, h);
+							this.drawImage(imageObj, drawX, drawY+s, w, h);
+							this.drawImage(imageObj, drawX, drawY-s, w, h);
+
+							this.drawImage(imageObj, drawX+s, drawY+s, w, h);
+							this.drawImage(imageObj, drawX+s, drawY-s, w, h);
+							this.drawImage(imageObj, drawX-s, drawY+s, w, h);
+							this.drawImage(imageObj, drawX-s, drawY-s, w, h);
+						}
 						//renders image in wrap-around boards
 					}.bind(context)
 
@@ -321,7 +379,7 @@
 					return context
 				}
 
-				render(){
+				render(zoom, cameraCenter){
 					let context = this.context;
 					let sim = this.sim;
 					context.clear();
@@ -330,12 +388,19 @@
 
 					let headSpec = {x: 100, y: 100, width: 50, height: 50, xAnchor: 0.5, yAnchor: 0.5};
 
-					camera.x = this.observer.x-this.xLen/2;
-					camera.y = this.observer.y-this.yLen/2;
-
+					if(cameraCenter == "observer"){
+						camera.x = this.observer.x-(this.xLen/2)/zoom;
+						camera.y = this.observer.y-(this.yLen/2)/zoom;
+						camera.wrap = true;
+					}else{
+						camera.x = cameraCenter.x-(this.xLen/2)/zoom;
+						camera.y = cameraCenter.y-(this.yLen/2)/zoom;
+						camera.wrap = false;
+					}
+					
 					for(let i = 0; i < sim.lightList.length; i++){
 						let lightSpec = {x: sim.lightList[i].x, y: sim.lightList[i].y, width: 45, height: 45, xAnchor: 0.5, yAnchor: 0.5};
-						context.draw(lightSpec, Img.light, camera)
+						context.draw(lightSpec, Img.light, camera, zoom)
 					}
 
 					sim.snakeList.forEach(snake => {
@@ -344,9 +409,9 @@
 
 						for(let i = 0; i < snake.body.length; i++){
 							let bodySpec = {x: snake.body[i].x, y: snake.body[i].y, width: 40, height: 40, xAnchor: 0.5, yAnchor: 0.5};
-							context.draw(bodySpec, Img.body, camera)
+							context.draw(bodySpec, Img.body, camera, zoom)
 						}
-						context.draw(headSpec, Img.head, camera);
+						context.draw(headSpec, Img.head, camera, zoom);
 					})
 				}
 			}
@@ -369,47 +434,124 @@
 				while(sim.timeSinceLastSim > 1/60){
 					sim.lightsEaten(sim.snake);
 					sim.snakesCollided();
-					$("#length").html("Your length is "+sim.snake.length);
+					//$("#length").html("Your length is "+sim.snake.length);
 					sim.tick(1/60);
 					sim.timeSinceLastSim -= 1/60;
 				}
 			}
-
-			function tickView(view){
 			
-				view.render();
-			
+			class Network{
+				constructor(){
+					this.targetList = {};
+					setInterval( ()=> this.tick(), (1000/60) );
+				}
+				add( targetId, who ) {
+					this.targetList[targetId] = {
+						who: who,
+						buffer: []
+					};
+				}
+				send(sourceId, targetId, messageId, payload){
+					console.assert( this.targetList[targetId] );
+					console.assert( this.targetList[sourceId] );
+					console.assert( messageId && typeof messageId == 'string' );
+					console.assert( payload === undefined || typeof payload === 'string' );
+					this.targetList[targetId].buffer.push({
+						sourceId: sourceId,
+						targetId: targetId,
+						messageId: messageId,
+						payload: payload
+					});
+				}
+				tick() {
+					$.each( this.targetList, (targetId,target) => {
+						let message = target.buffer.shift();
+						if( message ) {
+							target.who.message( message );
+						}
+					} )
+				}
 			}
 
 			class Server{
-				constructor(){
-					this.board = new Board(500)
-					this.sim = new Sim(this.board)
+				constructor(network){
+					this.network = network;
+					this.network.add( 'server', this );
+					this.board = new Board();
+					this.board.setData(750)
+					this.sim = new Sim()
+					this.sim.initSim(this.board)
 					setInterval(()=>{tickSim(this.sim)}, (1000/60))
+					//this.network.send("server", "client", "initialState", JSON.stringify(this.getState(this.sim)))
+					//setInterval(()=>{this.network.send("server", "client", "state", JSON.stringify(this.getState(this.sim)))}, (1000/60))
+				}
+				message( message ) {
+					
+				}
+				getState(sim){
+					let state = {}
+					state.board = sim.board;
+					state.snakeList = sim.snakeList;
+					state.lightList = sim.lightList;
+					return state;
 				}
 			}
 
 			class Client{
-				constructor(canvasId){
-					this.board = new Board(500)
+				constructor(network, canvasId){
+					this.network = network;
+					this.network.add( 'client', this );
+					this.canvasId = canvasId;
+				}
+				message( message ) {
+					if(message.messageId = "initialState"){
+						this.initClient(this.canvasId, JSON.parse(message.payload))
+					}
+					if(message.messageId = "state"){
+
+					}
+				}
+				initClient(canvasId, initialState){
+					this.board = new Board(0);
+					Object.assign(this.board, initialState.board)
 					this.sim = new Sim(this.board)
+
+					this.insertState(initialState)
 
 					let canvas = $('<canvas width="550" height="400"></canvas>');
 
 					canvas.appendTo(canvasId)
 
-					this.view = new View(this.sim.snakeList[0], this.sim, canvas, this.board)
+					this.view = new View(this.sim.snakeList[0], this.sim, canvas)
 
 					initControls(this.sim.snakeList[0]);
 
 					setInterval(()=>{tickSim(this.sim)}, (1000/60))
-					setInterval(()=>{tickView(this.view)}, (1000/60))
+					setInterval(()=>{this.view.render(0.5, "observer")}, (1000/60))
+				}
+				insertState(state){
+					this.sim.snakeList = state.snakeList;
+					this.sim.lightList = state.lightList;
 				}
 			}
 
 			function Main(){
-				new Server();
-				new Client("#canvas");
+				let network = new Network();
+				//new Client(network,"#canvas");
+				let serverSim = new Server(network).sim;
+				
+				hackView(serverSim)
+
+				function hackView(sim){
+					let canvas = $('<canvas width="550" height="400"></canvas>');
+
+					canvas.appendTo("#canvas")
+
+					let view = new View(sim.snakeList[0], sim, canvas)
+
+					setInterval(()=>{view.render(Math.min(view.xLen, view.yLen)/view.board.size, {x: 0, y: 0})}, (1000/60))
+
+				}
 			}
 
 			$( document ).ready(function(){	
